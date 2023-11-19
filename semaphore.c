@@ -113,8 +113,8 @@ int sem_wait(int sem_id)
 
 	while (sem[sem_id].value <= 0)
 	{
-		enqueue_waiter(&sem[sem_id], mypid()); // mypid()는 현재 프로세스의 pid를 반환
-		block();
+		enqueue_waiter(&sem[sem_id], mypid());
+		block(&sem[sem_id].lock);
 	}
 
 	sem[sem_id].value--;
@@ -130,7 +130,7 @@ int sem_signal(int sem_id)
 		int pid = dequeue_waiter(&sem[sem_id]);
 		if (pid >= 0)
 		{
-			wakeup_pid(pid);
+			wakeup_pid(pid, &ptable.lock);
 		}
 	}
 
