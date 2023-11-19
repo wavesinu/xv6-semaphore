@@ -82,20 +82,57 @@ int sem_destroy(int num)
 
 static int enqueue_waiter(struct semaphore *sem, int pid)
 {
-
+	for (int i = 0; i < MAX_WAITERS; i++)
+	{
+		if (sem->waiters[i] == 0)
+		{ // 0은 비어있음을 나타냄
+			sem->waiters[i] = pid;
+			return 0; // 성공
+		}
+	}
+	return -1; // 실패: 대기열이 가득 참
 }
 
 static int dequeue_waiter(struct semaphore *sem)
 {
-
+	for (int i = 0; i < MAX_WAITERS; i++)
+	{
+		if (sem->waiters[i] != 0)
+		{
+			int pid = sem->waiters[i];
+			sem->waiters[i] = 0; // 대기열에서 제거
+			return pid;
+		}
+	}
+	return -1; // 실패: 대기열이 비어 있음
 }
 
 int sem_wait(int sem_id)
 {
+	acquire(&sem[sem_id].lock);
 
+	while (sem[sem_id].value <= 0)
+	{
+		enqueue_waiter(&sem[sem_id], mypid()); // mypid()는 현재 프로세스의 pid를 반환
+		block();
+	}
+
+	sem[sem_id].value--;
+	release(&sem[sem_id].lock);
 }
 
 int sem_signal(int sem_id)
 {
+	acquire(&sem[sem_id].lock);
 
+	if (++sem[sem_id].value <= 0)
+	{
+		int pid = dequeue_waiter(&sem[sem_id]);
+		if (pid >= 0)
+		{
+			wakeup_pid(pid);
+		}
+	}
+
+	release(&sem[sem_id].lock);
 }
