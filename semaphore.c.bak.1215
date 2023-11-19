@@ -1,0 +1,210 @@
+#include "types.h"
+#include "x86.h"
+#include "defs.h"
+#include "param.h"
+#include "spinlock.h"
+#include "mmu.h"
+#include "proc.h"
+
+#define NSEMS			32 // 32 entries for semophore table
+#define MAX_WAITERS		64 // maximum no of waiters
+
+extern struct {
+	struct spinlock lock;
+	struct proc proc[NPROC];
+} ptable;
+
+struct semaphore {
+	int value;
+	int active; // if it is used or not
+	int waiters[MAX_WAITERS];
+	struct spinlock lock;
+} sem[NSEMS];
+
+// function to initiallize the semophore table (at booting time)
+// You don't need call this seminit function!! 
+void
+seminit(void)
+{
+	int i, j;
+
+	for(i = 0; i < NSEMS; ++i)
+	{
+		initlock(&sem[i].lock, "semaphore");
+		sem[i].active = 0;
+		sem[i].value = 0;
+
+		for (j=0; j<MAX_WAITERS; j++) sem[i].waiters[j] = -1; // HUFS
+
+	}
+}
+
+int 
+sem_create(int max)
+{ 
+	int i;
+
+	// find an entry is NOT active (not used)
+	for (i=0; i<NSEMS; i++) {
+		acquire(&sem[i].lock);
+		if (sem[i].active == 0) { 
+			sem[i].value = max;
+			sem[i].active = 1; // mark it as used (will be)
+			release(&sem[i].lock);
+			return i;
+		}
+		release(&sem[i].lock);
+	}
+
+	return -1;
+}
+
+int
+sem_destroy(int num)
+{
+	// check if the entry is valid
+	if(num < 0 || num > NSEMS)
+		return -1;
+
+	acquire(&sem[num].lock);
+	// check if the entry is actived
+	if(sem[num].active != 1) 
+		return -1;
+	sem[num].active = 0;
+	release(&sem[num].lock);
+
+	return 0;
+}
+
+static int enqueue_waiter(struct semaphore *sem, int pid)
+{
+	int i;
+
+	for (i=0; i<MAX_WAITERS; i++)
+		if (sem->waiters[i]==-1) {
+			sem->waiters[i] = pid;
+			return 0;
+		}
+
+	panic("eq: no entry to record a writer...");
+	return -1;
+}
+
+
+static int dequeue_waiter(struct semaphore *sem)
+{
+	int i, pid;
+
+	for (i=0; i<MAX_WAITERS; i++)
+		if ( (pid=sem->waiters[i])!=-1) {
+			sem->waiters[i] = -1; // clear the slot
+			return pid;
+		}
+
+	panic("dq: not found an entry for a writer...");
+	return -1;
+
+}
+
+int
+sem_wait(int num)
+{
+	int opid;
+
+	// check if the entry is valid
+	if(num < 0 || num > NSEMS)
+		return -1;
+
+	acquire(&sem[num].lock);
+
+	opid = proc->pid;
+
+	// check if the entry is actived
+	if(sem[num].active == 0) {
+		panic("sem_wait: sem is NOT active...");
+		release(&sem[num].lock);
+//		release(&ptable.lock); // for debug
+		return -1;
+	}
+
+	//the thread enter the critical section, grap a lock
+	sem[num].value--;
+
+	if (sem[num].value < 0) {
+
+		if (enqueue_waiter(&sem[num], proc->pid)==-1) {
+			release(&sem[num].lock);
+
+			panic("sem_wait: enqueue returns -1");
+			return -1;
+		}
+		if (opid != proc->pid) panic("sem_wait: different pid 1 "); // for debugging
+
+//		acquire(&ptable.lock); // for debug
+		block(&sem[num].lock); // HUFS
+//		release(&ptable.lock); // for debug
+
+		if (opid != proc->pid) panic("sem_wait: different pid 2 "); // for debugging
+
+		release(&sem[num].lock);
+		return 0;
+	}
+	else {	
+		release(&sem[num].lock);
+		return 0;
+	}
+}
+
+int
+sem_signal(int num)
+{
+	int rpid;
+
+	// check if the entry is valid
+	if(num < 0 || num > NSEMS)
+		return -1;
+
+//	acquire(&ptable.lock); // for debug
+	acquire(&sem[num].lock);
+
+	// check if the entry is actived
+	if(sem[num].active == 0) {
+		panic("sem_signal: sem is NOT active...");
+		return -1; 
+	}
+	// the thread exit the critical section, return a lock
+	sem[num].value++;
+
+	if (sem[num].value <= 0) { // HUFS: somebody is waiting for this semaphore
+
+		int pid = dequeue_waiter(&sem[num]);
+
+		if (pid == -1) {
+			panic("sem_signal: dq returns -1");
+			release(&sem[num].lock);
+//			release(&ptable.lock); // for debug
+			return -1;
+		}
+
+	
+	//	acquire(&ptable.lock); // for debug
+		rpid = wakeup_pid(pid, &sem[num].lock);
+	//	release(&ptable.lock); // for debug
+
+		if (rpid == -1) {
+			panic("cannot find the pid in the queue...");
+			release(&sem[num].lock);
+//			release(&ptable.lock); // for debug
+			return -1; // not found a process with the pid
+		}
+
+		release(&sem[num].lock);
+//		release(&ptable.lock); // for debug
+		return 0;
+	}
+	else {
+		release(&sem[num].lock);
+		//release(&ptable.lock); // for debug
+		return 0;
+	}
+}
