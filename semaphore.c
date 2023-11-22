@@ -25,6 +25,7 @@ struct semaphore
 
 // function to initiallize the semophore table (at booting time)
 // You DO NOT need call this seminit function!!
+// proc.c kill 함수 참조
 void seminit(void)
 {
 	int i, j;
@@ -80,59 +81,79 @@ int sem_destroy(int num)
 	return 0;
 }
 
-static int enqueue_waiter(struct semaphore *sem, int pid)
+static int enqueue_waiter(struct semaphore *s, int pid)
 {
+	acquire(&s->lock);
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (sem->waiters[i] == 0)
-		{ // 0은 비어있음을 나타냄
-			sem->waiters[i] = pid;
-			return 0; // 성공
+		if (s->waiters[i] == -1)
+		{
+			s->waiters[i] = pid;
+			release(&s->lock);
+			return 0;
 		}
 	}
-	return -1; // 실패: 대기열이 가득 참
+	release(&s->lock);
+	return -1;
 }
 
-static int dequeue_waiter(struct semaphore *sem)
+static int dequeue_waiter(struct semaphore *s)
 {
+	acquire(&s->lock);
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (sem->waiters[i] != 0)
+		if (s->waiters[i] != -1)
 		{
-			int pid = sem->waiters[i];
-			sem->waiters[i] = 0; // 대기열에서 제거
+			int pid = s->waiters[i];
+			s->waiters[i] = -1;
+			release(&s->lock);
 			return pid;
 		}
 	}
-	return -1; // 실패: 대기열이 비어 있음
+	release(&s->lock);
+	return -1;
 }
 
 int sem_wait(int sem_id)
 {
+	if (sem_id < 0 || sem_id >= NSEMS)
+		return -1;
+
 	acquire(&sem[sem_id].lock);
-
-	while (sem[sem_id].value <= 0)
+	if (--sem[sem_id].value < 0)
 	{
-		enqueue_waiter(&sem[sem_id], mypid());
-		block(&sem[sem_id].lock);
+		enqueue_waiter(&sem[sem_id], proc->pid);
+		sleep(proc, &sem[sem_id].lock);
 	}
-
-	sem[sem_id].value--;
 	release(&sem[sem_id].lock);
+
+	return 0;
 }
 
 int sem_signal(int sem_id)
 {
-	acquire(&sem[sem_id].lock);
+	if (sem_id < 0 || sem_id >= NSEMS)
+		return -1;
 
+	acquire(&sem[sem_id].lock);
 	if (++sem[sem_id].value <= 0)
 	{
 		int pid = dequeue_waiter(&sem[sem_id]);
-		if (pid >= 0)
+		if (pid != -1)
 		{
-			wakeup_pid(pid, &ptable.lock);
+			struct proc *p;
+			// ptable에서 pid에 해당하는 프로세스를 찾아 wakeup 호출
+			for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+			{
+				if (p->pid == pid)
+				{
+					wakeup(p);
+					break;
+				}
+			}
 		}
 	}
-
 	release(&sem[sem_id].lock);
+
+	return 0;
 }
