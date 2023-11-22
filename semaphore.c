@@ -114,46 +114,40 @@ static int dequeue_waiter(struct semaphore *s)
 	return -1;
 }
 
-int sem_wait(int sem_id)
+int
+sem_wait(int sem_id)
 {
-	if (sem_id < 0 || sem_id >= NSEMS)
-		return -1;
+        // write your code
+        if (sem_id < 0 || sem_id >= NSEMS)
+        return -1;
 
-	acquire(&sem[sem_id].lock);
-	if (--sem[sem_id].value < 0)
-	{
-		enqueue_waiter(&sem[sem_id], proc->pid);
-		sleep(proc, &sem[sem_id].lock);
-	}
-	release(&sem[sem_id].lock);
+    acquire(&sem[sem_id].lock);
+    if (--sem[sem_id].value < 0) {
+        enqueue_waiter(&sem[sem_id], proc->pid);
+        block(&sem[sem_id].lock);
+    }
+        else {
+                release(&sem[sem_id].lock);
+        }
 
-	return 0;
+    return 0;
 }
 
-int sem_signal(int sem_id)
-{
-	if (sem_id < 0 || sem_id >= NSEMS)
-		return -1;
+int sem_signal(int sem_id) {
+        // write your code
+        if (sem_id < 0 || sem_id >= NSEMS)
+        return -1;
 
-	acquire(&sem[sem_id].lock);
-	if (++sem[sem_id].value <= 0)
-	{
-		int pid = dequeue_waiter(&sem[sem_id]);
-		if (pid != -1)
-		{
-			struct proc *p;
-			// ptable에서 pid에 해당하는 프로세스를 찾아 wakeup 호출
-			for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-			{
-				if (p->pid == pid)
-				{
-					wakeup(p);
-					break;
-				}
-			}
-		}
-	}
-	release(&sem[sem_id].lock);
+    acquire(&sem[sem_id].lock);
+    if (sem[sem_id].value++ < 0) {
+        int pid = dequeue_waiter(&sem[sem_id]);
+        if (pid != -1) {
+            wakeup_pid(pid, &sem[sem_id].lock);  // 대기 중인 프로세스 깨우기
+            // wakeup_pid 함수 내부에서 lock을 해제하고 다시 획득합니다.
+        }
+    } else {
+        release(&sem[sem_id].lock);
+    }
 
-	return 0;
+    return 0;
 }
