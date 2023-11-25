@@ -25,6 +25,7 @@ struct semaphore
 
 // function to initiallize the semophore table (at booting time)
 // You DO NOT need call this seminit function!!
+// proc.c kill 함수 참조
 void seminit(void)
 {
 	int i, j;
@@ -80,22 +81,79 @@ int sem_destroy(int num)
 	return 0;
 }
 
-static int enqueue_waiter(struct semaphore *sem, int pid)
+static int enqueue_waiter(struct semaphore *s, int pid)
 {
-
+	acquire(&s->lock);
+	for (int i = 0; i < MAX_WAITERS; i++)
+	{
+		if (s->waiters[i] == -1)
+		{
+			s->waiters[i] = pid;
+			release(&s->lock);
+			return 0;
+		}
+	}
+	release(&s->lock);
+	return -1;
 }
 
-static int dequeue_waiter(struct semaphore *sem)
+static int dequeue_waiter(struct semaphore *s)
 {
-
+	acquire(&s->lock);
+	for (int i = 0; i < MAX_WAITERS; i++)
+	{
+		if (s->waiters[i] != -1)
+		{
+			int pid = s->waiters[i];
+			s->waiters[i] = -1;
+			release(&s->lock);
+			return pid;
+		}
+	}
+	release(&s->lock);
+	return -1;
 }
 
 int sem_wait(int sem_id)
 {
+	// write your code
+	if (sem_id < 0 || sem_id >= NSEMS)
+		return -1;
 
+	acquire(&sem[sem_id].lock);
+	if (--sem[sem_id].value < 0)
+	{
+		enqueue_waiter(&sem[sem_id], proc->pid);
+		block(&sem[sem_id].lock);
+	}
+	else
+	{
+		release(&sem[sem_id].lock);
+	}
+
+	return 0;
 }
 
 int sem_signal(int sem_id)
 {
+	// write your code
+	if (sem_id < 0 || sem_id >= NSEMS)
+		return -1;
 
+	acquire(&sem[sem_id].lock);
+	if (sem[sem_id].value++ < 0)
+	{
+		int pid = dequeue_waiter(&sem[sem_id]);
+		if (pid != -1)
+		{
+			wakeup_pid(pid, &sem[sem_id].lock); // 대기 중인 프로세스 깨우기
+			// wakeup_pid 함수 내부에서 lock을 해제하고 다시 획득합니다.
+		}
+	}
+	else
+	{
+		release(&sem[sem_id].lock);
+	}
+
+	return 0;
 }
