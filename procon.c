@@ -31,7 +31,7 @@ int get()
     return tmp;
 }
 
-void producer(void *arg)
+void *producer(void *arg)
 {
     int i;
     int id = *(int *)arg;
@@ -47,7 +47,7 @@ void producer(void *arg)
     exit();
 }
 
-void consumer(void *arg)
+void *consumer(void *arg)
 {
     int i;
     int id = *(int *)arg;
@@ -66,7 +66,7 @@ void consumer(void *arg)
 int main()
 {
     int i;
-    int ids[2] = {0, 1};
+    int ids[2];
 
     empty = sem_create(BUFFER_SIZE);
     full = sem_create(0);
@@ -74,13 +74,17 @@ int main()
 
     for (i = 0; i < 2; i++)
     {
-        hufs_thread_create(producer, &ids[i]);
-        hufs_thread_create(consumer, &ids[i]);
+		ids[i] = malloc(sizeof(int));
+		*ids[i] = i;
+
+        hufs_thread_create(producer, ids[i]);
+        hufs_thread_create(consumer, ids[i]);
     }
 
     for (i = 0; i < 4; i++)
     {
         hufs_thread_join(i + 1);
+		free(ids[i/2]);
     }
 
     printf(1, "producer (1): %d produced\n", pro_counter[0]);
