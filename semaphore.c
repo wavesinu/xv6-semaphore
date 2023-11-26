@@ -81,27 +81,27 @@ int sem_destroy(int num)
 	return 0;
 }
 
-static int enqueue_waiter(struct semaphore *s, int pid)
+static int enqueue_waiter(struct semaphore *sem, int pid)
 {
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (s->waiters[i] == -1)
+		if (sem->waiters[i] == -1)
 		{
-			s->waiters[i] = pid;
+			sem->waiters[i] = pid;
 			return 0;
 		}
 	}
 	return -1;
 }
 
-static int dequeue_waiter(struct semaphore *s)
+static int dequeue_waiter(struct semaphore *sem)
 {
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (s->waiters[i] != -1)
+		if (sem->waiters[i] != -1)
 		{
-			int pid = s->waiters[i];
-			s->waiters[i] = -1;
+			int pid = sem->waiters[i];
+			sem->waiters[i] = -1;
 			return pid;
 		}
 	}
