@@ -16,19 +16,35 @@ int con_counter[2] = {0, 0};
 
 int empty, full, mutex;
 
-void put(int value)
+void put(int value, int id)
 {
-    buffer[fill_ptr] = value;
-    fill_ptr = (fill_ptr + 1) % BUFFER_SIZE;
-    count++;
+        sem_wait(empty);
+        sem_wait(mutex);
+
+        buffer[fill_ptr] = value;
+        fill_ptr = (fill_ptr + 1) % BUFFER_SIZE;
+        count++;
+        pro_counter[id]++;
+
+        sem_signal(mutex);
+        sem_signal(full);
 }
 
-int get()
+int get(int id)
 {
-    int tmp = buffer[use_ptr];
-    use_ptr = (use_ptr + 1) % BUFFER_SIZE;
-    count--;
-    return tmp;
+        sem_wait(full);
+        sem_wait(mutex);
+
+        int tmp = -1;
+
+        tmp = buffer[use_ptr];
+        use_ptr = (use_ptr + 1) % BUFFER_SIZE;
+        count--;
+        con_counter[id]++;
+
+        sem_signal(mutex);
+        sem_signal(empty);
+        return tmp;
 }
 
 void *producer(void *arg)
@@ -37,14 +53,9 @@ void *producer(void *arg)
     int id = *(int *)arg;
     for (i = 0; i < N; i++)
     {
-        sem_wait(empty);
-        sem_wait(mutex);
-        put(i);
-        pro_counter[id]++;
-        sem_signal(mutex);
-        sem_signal(full);
+        put(i, id % 2);
     }
-    exit();
+        return 0;
 }
 
 void *consumer(void *arg)
@@ -53,34 +64,42 @@ void *consumer(void *arg)
     int id = *(int *)arg;
     for (i = 0; i < N; i++)
     {
-        sem_wait(full);
-        sem_wait(mutex);
-        get();
-        con_counter[id]++;
-        sem_signal(mutex);
-        sem_signal(empty);
+        get(id % 2);
     }
-    exit();
+        return 0;
 }
 
 int main()
 {
     int i;
-    int ids[2];
+    int ids[4] = {0, 1, 2, 3};
 
     empty = sem_create(BUFFER_SIZE);
     full = sem_create(0);
     mutex = sem_create(1);
 
-    for (i = 0; i < 2; i++)
-    {
-        hufs_thread_create(producer, (void *)ids[i]);
-        hufs_thread_create(consumer, (void *)ids[i]);
+
+        // Check if semaphore creation is successful
+    if (empty < 0 || full < 0 || mutex < 0) {
+        printf(1, "Error creating semaphores\n");
+        exit();
+    }
+
+    // Create producer and consumer threads
+    for (int i = 0; i < 2; i++) {
+        if (hufs_thread_create(producer, &ids[i]) < 0) {
+            printf(1, "Error creating producer thread\n");
+            exit();
+        }
+        if (hufs_thread_create(consumer, &ids[i+2]) < 0) {
+            printf(1, "Error creating consumer thread\n");
+            exit();
+        }
     }
 
     for (i = 0; i < 4; i++)
     {
-        hufs_thread_join(i + 1);
+        hufs_thread_join(ids[i]);
     }
 
     printf(1, "producer (1): %d produced\n", pro_counter[0]);
