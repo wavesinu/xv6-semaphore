@@ -81,42 +81,35 @@ int sem_destroy(int num)
 	return 0;
 }
 
-static int enqueue_waiter(struct semaphore *s, int pid)
+static int enqueue_waiter(struct semaphore *sem, int pid)
 {
-	acquire(&s->lock);
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (s->waiters[i] == -1)
+		if (sem->waiters[i] == -1)
 		{
-			s->waiters[i] = pid;
-			release(&s->lock);
+			sem->waiters[i] = pid;
 			return 0;
 		}
 	}
-	release(&s->lock);
 	return -1;
 }
 
-static int dequeue_waiter(struct semaphore *s)
+static int dequeue_waiter(struct semaphore *sem)
 {
-	acquire(&s->lock);
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
-		if (s->waiters[i] != -1)
+		if (sem->waiters[i] != -1)
 		{
-			int pid = s->waiters[i];
-			s->waiters[i] = -1;
-			release(&s->lock);
+			int pid = sem->waiters[i];
+			sem->waiters[i] = -1;
 			return pid;
 		}
 	}
-	release(&s->lock);
 	return -1;
 }
 
 int sem_wait(int sem_id)
 {
-	// write your code
 	if (sem_id < 0 || sem_id >= NSEMS)
 		return -1;
 
@@ -136,7 +129,6 @@ int sem_wait(int sem_id)
 
 int sem_signal(int sem_id)
 {
-	// write your code
 	if (sem_id < 0 || sem_id >= NSEMS)
 		return -1;
 
@@ -146,8 +138,7 @@ int sem_signal(int sem_id)
 		int pid = dequeue_waiter(&sem[sem_id]);
 		if (pid != -1)
 		{
-			wakeup_pid(pid, &sem[sem_id].lock); // 대기 중인 프로세스 깨우기
-			// wakeup_pid 함수 내부에서 lock을 해제하고 다시 획득합니다.
+			wakeup_pid(pid, &sem[sem_id].lock);
 		}
 	}
 	else
