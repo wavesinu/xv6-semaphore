@@ -81,8 +81,10 @@ int sem_destroy(int num)
 	return 0;
 }
 
-static int enqueue_waiter(struct semaphore *sem, int pid)
+static int
+enqueue_waiter(struct semaphore *sem, int pid)
 {
+	// write code here
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
 		if (sem->waiters[i] == -1)
@@ -94,8 +96,10 @@ static int enqueue_waiter(struct semaphore *sem, int pid)
 	return -1;
 }
 
-static int dequeue_waiter(struct semaphore *sem)
+static int
+dequeue_waiter(struct semaphore *sem)
 {
+	// write code here
 	for (int i = 0; i < MAX_WAITERS; i++)
 	{
 		if (sem->waiters[i] != -1)
@@ -110,6 +114,7 @@ static int dequeue_waiter(struct semaphore *sem)
 
 int sem_wait(int sem_id)
 {
+	// write code here
 	if (sem_id < 0 || sem_id >= NSEMS)
 		return -1;
 
@@ -119,16 +124,14 @@ int sem_wait(int sem_id)
 		enqueue_waiter(&sem[sem_id], proc->pid);
 		block(&sem[sem_id].lock);
 	}
-	else
-	{
-		release(&sem[sem_id].lock);
-	}
+	release(&sem[sem_id].lock);
 
 	return 0;
 }
 
 int sem_signal(int sem_id)
 {
+	// write code here
 	if (sem_id < 0 || sem_id >= NSEMS)
 		return -1;
 
@@ -141,10 +144,7 @@ int sem_signal(int sem_id)
 			wakeup_pid(pid, &sem[sem_id].lock);
 		}
 	}
-	else
-	{
-		release(&sem[sem_id].lock);
-	}
+	release(&sem[sem_id].lock);
 
 	return 0;
 }
