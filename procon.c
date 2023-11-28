@@ -2,86 +2,73 @@
 #include "stat.h"
 #include "user.h"
 #include "fcntl.h"
+#include "semaphore.h"
 
-#define N 10000 // number of items to be produced and consumed
 #define BUFFER_SIZE 1
+#define DATA_COUNT 10000
 
 int buffer[BUFFER_SIZE];
-int fill_ptr = 0;
-int use_ptr = 0;
-int count = 0;
-
-int pro_counter[2] = {0, 0};
-int con_counter[2] = {0, 0};
+int in = 0, out = 0;
 
 int empty, full, mutex;
+int pro_counter[2] = {0, 0}, con_counter[2] = {0, 0};
 
-void put(int value)
-{
-    buffer[fill_ptr] = value;
-    fill_ptr = (fill_ptr + 1) % BUFFER_SIZE;
-    count++;
-}
+void *producer(void *arg) {
+    int id = (int)arg;
+    for (;;) {
+                sem_wait(empty);
+                sem_wait(mutex);
 
-int get()
-{
-    int tmp = buffer[use_ptr];
-    use_ptr = (use_ptr + 1) % BUFFER_SIZE;
-    count--;
-    return tmp;
-}
+        if (pro_counter[0] + pro_counter[1] < DATA_COUNT) {
+                        pro_counter[id]++;
+                        buffer[in] = 1;
+                        in = (in + 1) % BUFFER_SIZE;
+        }
 
-void *producer(void *arg)
-{
-    int i;
-    int id = *(int *)arg;
-    for (i = 0; i < N; i++)
-    {
-        sem_wait(empty);
-        sem_wait(mutex);
-        put(i);
-        pro_counter[id]++;
         sem_signal(mutex);
         sem_signal(full);
+
+                if (pro_counter[0] + pro_counter[1] >= DATA_COUNT) {
+                        break;
+                }
     }
-    exit();
+    return 0;
 }
 
-void *consumer(void *arg)
-{
-    int i;
-    int id = *(int *)arg;
-    for (i = 0; i < N; i++)
-    {
-        sem_wait(full);
+void *consumer(void *arg) {
+    int id = (int)arg;
+    for (;;) {
+                sem_wait(full);
         sem_wait(mutex);
-        get();
-        con_counter[id]++;
-        sem_signal(mutex);
-        sem_signal(empty);
+
+        if (con_counter[0] + con_counter[1] < DATA_COUNT) {
+                        con_counter[id]++;
+                        buffer[out] = 0;
+                        out = (out + 1) % BUFFER_SIZE;
+                }
+
+                sem_signal(mutex);
+                sem_signal(empty);
+
+                if (con_counter[0] + con_counter[1] >= DATA_COUNT) {
+                        break;
+                }
     }
-    exit();
+    return 0;
 }
 
-int main()
-{
-    int i;
-    int ids[2];
-
+int main(void) {
     empty = sem_create(BUFFER_SIZE);
     full = sem_create(0);
     mutex = sem_create(1);
 
-    for (i = 0; i < 2; i++)
-    {
-        hufs_thread_create(producer, (void *)ids[i]);
-        hufs_thread_create(consumer, (void *)ids[i]);
-    }
+    hufs_thread_create(producer, (void *)0);
+    hufs_thread_create(producer, (void *)1);
+    hufs_thread_create(consumer, (void *)0);
+    hufs_thread_create(consumer, (void *)1);
 
-    for (i = 0; i < 4; i++)
-    {
-        hufs_thread_join(i + 1);
-    }
+    for (int i = 0; i < 4; i++)
+        hufs_thread_join(i);
 
     printf(1, "producer (1): %d produced\n", pro_counter[0]);
     printf(1, "producer (2): %d produced\n", pro_counter[1]);
