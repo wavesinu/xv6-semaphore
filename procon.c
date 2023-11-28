@@ -14,16 +14,13 @@ int con_counter[2] = {0, 0};
 
 int empty, full, mutex;
 
-void producer(void *arg)
-{
-    int index = *(int *)arg;
-    while (1)
-    {
+void producer(void *arg) {
+    int index = *(int*)arg;
+    while (1) {
         sem_wait(empty);
         sem_wait(mutex);
 
-        if (produced >= TOTAL_DATA)
-        {
+        if (produced >= TOTAL_DATA) {
             sem_signal(mutex);
             sem_signal(full);
             break;
@@ -40,16 +37,13 @@ void producer(void *arg)
     exit();
 }
 
-void consumer(void *arg)
-{
-    int index = *(int *)arg;
-    while (1)
-    {
+void consumer(void *arg) {
+    int index = *(int*)arg;
+    while (1) {
         sem_wait(full);
         sem_wait(mutex);
 
-        if (consumed >= TOTAL_DATA)
-        {
+        if (consumed >= TOTAL_DATA) {
             sem_signal(mutex);
             sem_signal(empty);
             break;
@@ -65,21 +59,21 @@ void consumer(void *arg)
     exit();
 }
 
-int main()
-{
+int main() {
     empty = sem_create(BUFFER_SIZE);
     full = sem_create(0);
     mutex = sem_create(1);
 
     int arg1 = 0, arg2 = 1;
-    int pid1 = hufs_thread_create((void *)producer, (void *)&arg1);
-    int pid2 = hufs_thread_create((void *)producer, (void *)&arg2);
-    int pid3 = hufs_thread_create((void *)consumer, (void *)&arg1);
-    int pid4 = hufs_thread_create((void *)consumer, (void *)&arg2);
+
+	int pid1 = hufs_thread_create((void*)producer, (void*)&arg1);
+    int pid3 = hufs_thread_create((void*)consumer, (void*)&arg1);
+    int pid2 = hufs_thread_create((void*)producer, (void*)&arg2);
+    int pid4 = hufs_thread_create((void*)consumer, (void*)&arg2);
 
     hufs_thread_join(pid1);
-    hufs_thread_join(pid2);
     hufs_thread_join(pid3);
+    hufs_thread_join(pid2);
     hufs_thread_join(pid4);
 
     printf(1, "producer (1): %d produced\n", pro_counter[0]);
@@ -89,7 +83,7 @@ int main()
 
     sem_destroy(empty);
     sem_destroy(full);
-    sem_destroy(mutex);
+	sem_destroy(mutex);
 
-    exit();
+	exit();
 }
