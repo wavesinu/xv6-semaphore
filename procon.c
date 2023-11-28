@@ -16,24 +16,21 @@ int pro_counter[2] = {0, 0}, con_counter[2] = {0, 0};
 void *producer(void *arg) {
     int id = (int)arg;
     for (;;) {
-        sem_wait(empty);
-        sem_wait(mutex);
+                sem_wait(empty);
+                sem_wait(mutex);
 
-        if (pro_counter[0] + pro_counter[1] >= DATA_COUNT) {
-            sem_signal(mutex);
-            sem_signal(empty);
-            break;
+        if (pro_counter[0] + pro_counter[1] < DATA_COUNT) {
+                        pro_counter[id]++;
+                        buffer[in] = 1;
+                        in = (in + 1) % BUFFER_SIZE;
         }
-
-        buffer[in] = 1; // Produce data
-        in = (in + 1) % BUFFER_SIZE;
 
         sem_signal(mutex);
         sem_signal(full);
 
-                sem_wait(mutex);
-                pro_counter[id]++;
-                sem_signal(mutex);
+                if (pro_counter[0] + pro_counter[1] >= DATA_COUNT) {
+                        break;
+                }
     }
     return 0;
 }
@@ -41,23 +38,21 @@ void *producer(void *arg) {
 void *consumer(void *arg) {
     int id = (int)arg;
     for (;;) {
-        sem_wait(full);
+                sem_wait(full);
         sem_wait(mutex);
 
-        if (con_counter[0] + con_counter[1] >= DATA_COUNT) {
-            sem_signal(mutex);
-            sem_signal(full);
-            break;
-        }
+        if (con_counter[0] + con_counter[1] < DATA_COUNT) {
+                        con_counter[id]++;
+                        buffer[out] = 0;
+                        out = (out + 1) % BUFFER_SIZE;
+                }
 
-        out = (out + 1) % BUFFER_SIZE;
-
-        sem_signal(mutex);
-        sem_signal(empty);
-
-                sem_wait(mutex);
-                con_counter[id]++;
                 sem_signal(mutex);
+                sem_signal(empty);
+
+                if (con_counter[0] + con_counter[1] >= DATA_COUNT) {
+                        break;
+                }
     }
     return 0;
 }
